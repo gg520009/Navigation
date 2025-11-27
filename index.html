@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/lunar-javascript/lunar.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: url('https://images.unsplash.com/photo-1477346611705-65d1883cee1e?q=80&w=2070&auto=format&fit=crop') no-repeat center center fixed;
+            background-size: cover;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .glass-panel {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+        
+        /* 选中状态样式 */
+        .icon-option.active {
+            background: rgba(59, 130, 246, 0.5); /* blue-500 */
+            border-color: rgba(96, 165, 250, 0.8);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden text-white selection:bg-pink-500 selection:text-white">
+
+    <div id="app" class="h-full w-full flex p-4 md:p-6 gap-6 relative">
+        
+        <aside class="w-1/4 max-w-[320px] flex flex-col gap-6 h-full transition-all duration-500 hidden md:flex">
+            <div class="glass rounded-3xl p-6 flex flex-col items-center justify-center text-center relative overflow-hidden group hover:bg-white/20 transition-all">
+                <div class="text-6xl font-bold tracking-tighter mb-2">{{ timeDisplay }}</div>
+                <div class="text-lg opacity-80 mb-4">{{ dateDisplay }}</div>
+                <div class="w-full h-[1px] bg-white/20 my-2"></div>
+                <div class="mt-2 flex flex-col gap-1">
+                    <span class="text-xl font-medium text-yellow-300">{{ lunarDate.date }}</span>
+                    <span class="text-sm opacity-70">{{ lunarDate.gzYear }}年 {{ lunarDate.animal }}</span>
+                    <span class="text-xs opacity-60 mt-1">{{ lunarDate.term }}</span>
+                </div>
+            </div>
+
+            <div class="glass rounded-3xl p-6 flex-1 flex flex-col relative group">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-lg"><i class="fa-solid fa-location-dot mr-2"></i>{{ weather.city || '设置城市' }}</h3>
+                    <button @click="showCitySearch = true" class="text-xs bg-white/10 hover:bg-white/30 px-2 py-1 rounded transition">切换</button>
+                </div>
+                <div v-if="weather.temp" class="flex flex-col items-center justify-center flex-1">
+                    <div class="text-5xl mb-2">{{ weather.icon }}</div>
+                    <div class="text-5xl font-bold mb-1">{{ weather.temp }}°</div>
+                    <div class="text-sm opacity-75">{{ weather.desc }}</div>
+                    <div class="mt-4 grid grid-cols-2 gap-4 w-full text-center text-sm opacity-80">
+                        <div><i class="fa-solid fa-droplet mr-1"></i> {{ weather.humidity }}%</div>
+                        <div><i class="fa-solid fa-wind mr-1"></i> {{ weather.wind }}km/h</div>
+                    </div>
+                </div>
+                <div v-else class="flex-1 flex items-center justify-center opacity-60 cursor-pointer" @click="showCitySearch=true">
+                    点击设置天气
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 h-full flex flex-col gap-6 overflow-hidden">
+            <div class="glass rounded-full px-6 py-3 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-4 text-sm opacity-80">
+                    <span class="font-bold text-lg tracking-wide hidden sm:block">MY NAV</span>
+                </div>
+                <div class="flex-1 max-w-xl mx-auto relative group px-4">
+                    <i class="fa-solid fa-search absolute left-8 top-1/2 -translate-y-1/2 opacity-50"></i>
+                    <input type="text" v-model="searchText" placeholder="Google Search..." @keyup.enter="doSearch"
+                           class="w-full bg-black/20 border border-white/10 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:bg-black/40 focus:border-white/30 transition-all placeholder-white/40">
+                </div>
+                <div class="flex gap-3">
+                    <button @click="exportData" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/30 flex items-center justify-center transition" title="备份配置"><i class="fa-solid fa-download text-xs"></i></button>
+                    <button @click="openAddModal()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-full text-sm font-medium transition shadow-lg shadow-blue-500/30 flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">添加</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto pr-2 pb-10">
+                <div v-for="(cat, index) in filteredCategories" :key="index" class="mb-8">
+                    <div class="flex items-center gap-3 mb-4 pl-2 group">
+                        <h2 class="text-xl font-bold text-white/90 shadow-sm">{{ cat.name }}</h2>
+                        <button @click="deleteCategory(index)" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition text-xs"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                        <a v-for="(link, lIndex) in cat.links" :key="lIndex" :href="link.url" target="_blank" 
+                           class="glass-panel rounded-xl p-4 flex flex-col items-center gap-3 hover:bg-white/10 hover:-translate-y-1 transition-all duration-300 group relative">
+                            
+                            <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-2 z-10">
+                                <button @click.prevent="editLink(index, lIndex)" class="text-white/60 hover:text-white"><i class="fa-solid fa-pen text-xs"></i></button>
+                                <button @click.prevent="deleteLink(index, lIndex)" class="text-red-400/60 hover:text-red-400"><i class="fa-solid fa-times text-xs"></i></button>
+                            </div>
+
+                            <div class="w-10 h-10 rounded-lg shadow-md bg-white/10 flex items-center justify-center overflow-hidden">
+                                <i v-if="link.iconType === 'class'" :class="link.iconValue + ' text-xl text-white/90'"></i>
+                                <img v-else-if="link.iconType === 'url'" :src="link.iconValue" class="w-full h-full object-cover">
+                                <img v-else :src="'https://www.google.com/s2/favicons?domain=' + link.url + '&sz=128'" @error="handleImgError($event, link)" class="w-8 h-8 object-contain">
+                            </div>
+
+                            <span class="text-sm font-medium text-center truncate w-full px-1">{{ link.title }}</span>
+                        </a>
+                        
+                        <button @click="openAddModal(cat.name)" class="rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center p-4 min-h-[100px] hover:border-white/30 hover:bg-white/5 transition opacity-50 hover:opacity-100">
+                            <i class="fa-solid fa-plus text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div v-if="categories.length === 0" class="text-center py-20 opacity-50">
+                    <p>还没有内容，点击右上角添加分类</p>
+                </div>
+            </div>
+        </main>
+
+        <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div class="glass bg-[#1a1a2e]/95 rounded-2xl w-full max-w-lg p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+                <h3 class="text-2xl font-bold mb-6">{{ isEditing ? '编辑内容' : '添加新内容' }}</h3>
+                
+                <div v-if="!isEditing" class="flex p-1 bg-black/30 rounded-lg mb-6">
+                    <button @click="modalTab = 'link'" :class="{'bg-white/20 shadow': modalTab==='link'}" class="flex-1 py-1.5 rounded-md text-sm transition">添加链接</button>
+                    <button @click="modalTab = 'category'" :class="{'bg-white/20 shadow': modalTab==='category'}" class="flex-1 py-1.5 rounded-md text-sm transition">添加分类</button>
+                </div>
+
+                <div v-if="modalTab === 'link'" class="space-y-5">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs opacity-60 mb-1">标题</label>
+                            <input v-model="form.title" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs opacity-60 mb-1">分类</label>
+                            <select v-model="form.category" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 focus:border-blue-500 outline-none text-sm">
+                                <option v-for="c in categories" :value="c.name">{{ c.name }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs opacity-60 mb-1">链接地址 (URL)</label>
+                        <input v-model="form.url" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 focus:border-blue-500 outline-none" placeholder="http://...">
+                    </div>
+
+                    <div class="bg-white/5 rounded-xl p-4 border border-white/5">
+                        <label class="block text-xs opacity-60 mb-3">图标来源</label>
+                        <div class="flex gap-2 mb-4">
+                            <button type="button" @click="form.iconType = 'auto'" :class="{'active': form.iconType === 'auto'}" class="icon-option flex-1 py-1.5 rounded bg-black/20 border border-transparent text-xs hover:bg-white/10 transition">自动获取</button>
+                            <button type="button" @click="form.iconType = 'class'" :class="{'active': form.iconType === 'class'}" class="icon-option flex-1 py-1.5 rounded bg-black/20 border border-transparent text-xs hover:bg-white/10 transition">内置图标库</button>
+                            <button type="button" @click="form.iconType = 'url'" :class="{'active': form.iconType === 'url'}" class="icon-option flex-1 py-1.5 rounded bg-black/20 border border-transparent text-xs hover:bg-white/10 transition">自定义图片</button>
+                        </div>
+
+                        <div v-if="form.iconType === 'auto'" class="text-xs opacity-50 text-center py-2">
+                            将尝试从 Google 服务获取 Favicon。内网环境可能失效。
+                        </div>
+
+                        <div v-if="form.iconType === 'class'" class="space-y-3">
+                            <input v-model="form.iconValue" placeholder="输入 FontAwesome 代码 (如 fa-solid fa-home)" class="w-full bg-black/30 border border-white/10 rounded px-3 py-1.5 text-sm font-mono">
+                            <div class="flex flex-wrap gap-2 justify-center">
+                                <button v-for="icon in commonIcons" @click="form.iconValue = icon" class="w-8 h-8 rounded hover:bg-white/20 flex items-center justify-center transition" :class="{'bg-blue-500': form.iconValue === icon, 'bg-black/20': form.iconValue !== icon}">
+                                    <i :class="icon"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div v-if="form.iconType === 'url'">
+                            <input v-model="form.iconValue" placeholder="输入图片地址 (http://...)" class="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-sm">
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="modalTab === 'category'" class="space-y-4">
+                     <div>
+                        <label class="block text-xs opacity-60 mb-1">新分类名称</label>
+                        <input v-model="newCategoryName" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 focus:border-blue-500 outline-none" placeholder="例如：NAS服务、影音...">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-8">
+                    <button @click="closeModal" class="px-4 py-2 rounded-lg hover:bg-white/10 transition text-sm">取消</button>
+                    <button @click="saveItem" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg shadow-lg text-sm font-bold transition">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showCitySearch" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div class="glass bg-[#1a1a2e] rounded-2xl w-full max-w-sm p-6">
+                <h3 class="text-xl font-bold mb-4">设置天气位置</h3>
+                <div class="flex gap-2">
+                    <input v-model="cityQuery" @keyup.enter="searchCity" placeholder="输入城市名 (拼音或英文)" class="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 outline-none">
+                    <button @click="searchCity" class="bg-blue-600 px-4 rounded-lg"><i class="fa-solid fa-search"></i></button>
+                </div>
+                <div class="mt-4 max-h-[200px] overflow-y-auto space-y-2">
+                    <div v-for="res in cityResults" @click="selectCity(res)" class="p-2 hover:bg-white/10 rounded cursor-pointer flex justify-between">
+                        <span>{{ res.name }}</span>
+                        <span class="text-xs opacity-50">{{ res.admin1 }}, {{ res.country }}</span>
+                    </div>
+                </div>
+                <button @click="showCitySearch = false" class="mt-4 w-full py-2 text-sm text-white/50 hover:text-white">关闭</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const { createApp, ref, computed, onMounted, reactive } = Vue;
+
+    createApp({
+        setup() {
+            // 数据定义
+            const categories = ref([]);
+            const searchText = ref('');
+            
+            // 日期天气
+            const timeDisplay = ref('');
+            const dateDisplay = ref('');
+            const lunarDate = reactive({ date: '', animal: '', term: '', gzYear: '' });
+            const weather = reactive({ temp: null, city: '', desc: '', icon: '', humidity: 0, wind: 0, lat: null, long: null });
+            const showCitySearch = ref(false);
+            const cityQuery = ref('');
+            const cityResults = ref([]);
+
+            // 模态框相关
+            const showModal = ref(false);
+            const modalTab = ref('link');
+            const isEditing = ref(false);
+            const editIndexes = ref({ cat: -1, link: -1 });
+            
+            // 表单数据，增加 iconType 和 iconValue
+            const form = reactive({ title: '', url: '', category: '', iconType: 'auto', iconValue: '' });
+            const newCategoryName = ref('');
+
+            // 常用图标预设 (内网常用)
+            const commonIcons = [
+                'fa-solid fa-server', 'fa-solid fa-house', 'fa-solid fa-network-wired', 
+                'fa-solid fa-database', 'fa-brands fa-docker', 'fa-solid fa-film', 
+                'fa-solid fa-music', 'fa-solid fa-download', 'fa-solid fa-cloud',
+                'fa-solid fa-lock', 'fa-solid fa-terminal', 'fa-brands fa-github',
+                'fa-brands fa-linux', 'fa-solid fa-wifi', 'fa-solid fa-folder'
+            ];
+
+            const loadData = () => {
+                const savedData = localStorage.getItem('myNavData');
+                if (savedData) {
+                    categories.value = JSON.parse(savedData);
+                } else {
+                    categories.value = [
+                        { name: "我的服务", links: [
+                            { title: "NAS主页", url: "http://192.168.1.1", iconType: 'class', iconValue: 'fa-solid fa-server' },
+                            { title: "路由器", url: "http://192.168.1.254", iconType: 'class', iconValue: 'fa-solid fa-wifi' }
+                        ]}
+                    ];
+                }
+                const savedWeather = localStorage.getItem('myNavWeatherLoc');
+                if (savedWeather) {
+                    const loc = JSON.parse(savedWeather);
+                    Object.assign(weather, loc); // Load simple props
+                    weather.lat = loc.lat; weather.long = loc.long;
+                    fetchWeather();
+                }
+            };
+
+            const saveData = () => localStorage.setItem('myNavData', JSON.stringify(categories.value));
+
+            // 时间更新
+            const updateTime = () => {
+                const now = new Date();
+                timeDisplay.value = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+                dateDisplay.value = now.toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                const lunar = Lunar.fromDate(now);
+                lunarDate.date = lunar.getMonthInChinese() + "月" + lunar.getDayInChinese();
+                lunarDate.animal = lunar.getYearShengXiao() + '年';
+                lunarDate.gzYear = lunar.getYearInGanZhi();
+                lunarDate.term = lunar.getJieQi() || '';
+            };
+
+            // 天气逻辑
+            const searchCity = async () => {
+                if(!cityQuery.value) return;
+                try {
+                    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${cityQuery.value}&count=5&language=zh&format=json`).then(r=>r.json());
+                    if(res.results) cityResults.value = res.results;
+                } catch(e) {}
+            };
+            const selectCity = (c) => {
+                weather.city = c.name; weather.lat = c.latitude; weather.long = c.longitude;
+                localStorage.setItem('myNavWeatherLoc', JSON.stringify({ name: c.name, lat: c.latitude, long: c.longitude }));
+                showCitySearch.value = false;
+                fetchWeather();
+            };
+            const fetchWeather = async () => {
+                if(!weather.lat) return;
+                try {
+                    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${weather.lat}&longitude=${weather.long}&current_weather=true&hourly=relativehumidity_2m`).then(r=>r.json());
+                    const curr = res.current_weather;
+                    weather.temp = Math.round(curr.temperature);
+                    weather.wind = curr.windspeed;
+                    weather.desc = getWeatherDesc(curr.weathercode);
+                    weather.icon = getWeatherIcon(curr.weathercode);
+                    weather.humidity = res.hourly.relativehumidity_2m[new Date().getHours()] || 50;
+                } catch(e) {}
+            };
+            const getWeatherDesc = (code) => code===0?'晴朗':code<3?'多云':code<50?'有雾':code<70?'下雨':'雷雨';
+            const getWeatherIcon = (code) => code===0?'☀':code<3?'☁':code<50?'🌫':code<70?'🌧':'⛈';
+
+            // 操作逻辑
+            const openAddModal = (catName = null) => {
+                isEditing.value = false;
+                form.title = ''; form.url = ''; 
+                form.category = catName || (categories.value[0]?.name || '');
+                form.iconType = 'auto'; form.iconValue = '';
+                modalTab.value = catName ? 'link' : 'link';
+                showModal.value = true;
+            };
+
+            const editLink = (cIndex, lIndex) => {
+                isEditing.value = true;
+                modalTab.value = 'link';
+                editIndexes.value = { cat: cIndex, link: lIndex };
+                const item = categories.value[cIndex].links[lIndex];
+                form.title = item.title;
+                form.url = item.url;
+                form.category = categories.value[cIndex].name;
+                // 兼容旧数据
+                form.iconType = item.iconType || 'auto';
+                form.iconValue = item.iconValue || '';
+                showModal.value = true;
+            };
+
+            const closeModal = () => showModal.value = false;
+
+            const saveItem = () => {
+                if (modalTab.value === 'category') {
+                    if (newCategoryName.value) {
+                        categories.value.push({ name: newCategoryName.value, links: [] });
+                        newCategoryName.value = '';
+                    }
+                } else {
+                    if (!form.url) return;
+                    if (!form.url.startsWith('http')) form.url = 'http://' + form.url;
+                    
+                    let targetCat = categories.value.find(c => c.name === form.category);
+                    if(!targetCat) {
+                        targetCat = { name: form.category, links: [] };
+                        categories.value.push(targetCat);
+                    }
+
+                    const newItem = { 
+                        title: form.title || 'Link', 
+                        url: form.url,
+                        iconType: form.iconType,
+                        iconValue: form.iconValue
+                    };
+
+                    if (isEditing.value) {
+                        const oldCat = categories.value[editIndexes.value.cat];
+                        if (oldCat.name === form.category) {
+                            oldCat.links[editIndexes.value.link] = newItem;
+                        } else {
+                            oldCat.links.splice(editIndexes.value.link, 1);
+                            targetCat.links.push(newItem);
+                        }
+                    } else {
+                        targetCat.links.push(newItem);
+                    }
+                }
+                saveData();
+                closeModal();
+            };
+
+            const deleteLink = (cI, lI) => { if(confirm('删除此链接?')) { categories.value[cI].links.splice(lI,1); saveData(); }};
+            const deleteCategory = (i) => { if(confirm('删除分类?')) { categories.value.splice(i,1); saveData(); }};
+            const doSearch = () => { window.open(`https://www.google.com/search?q=${searchText.value}`, '_blank'); searchText.value=''; };
+            
+            const handleImgError = (e, link) => {
+                // 如果图片加载失败（比如内网没网），回退到首字母头像
+                e.target.src = 'https://ui-avatars.com/api/?name=' + link.title + '&background=random';
+            };
+
+            const exportData = () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(categories.value));
+                const a = document.createElement('a');
+                a.href = dataStr; a.download = "mynav_backup.json";
+                document.body.appendChild(a); a.click(); a.remove();
+            };
+
+            const filteredCategories = computed(() => categories.value);
+
+            onMounted(() => {
+                loadData();
+                updateTime();
+                setInterval(updateTime, 1000);
+                setInterval(fetchWeather, 3600000);
+            });
+
+            return {
+                categories, searchText, timeDisplay, dateDisplay, lunarDate, weather,
+                showCitySearch, cityQuery, cityResults, searchCity, selectCity,
+                showModal, modalTab, isEditing, form, newCategoryName, commonIcons,
+                openAddModal, editLink, closeModal, saveItem, deleteLink, deleteCategory,
+                doSearch, filteredCategories, exportData, handleImgError
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
