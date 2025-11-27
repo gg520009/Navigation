@@ -1,6 +1,7 @@
 # Navigation
 部署个人导航主页
-![Uploading image.png…]()
+
+![屏幕截图 2025-11-27 204217](https://github.com/user-attachments/assets/94913d28-16a3-48a8-8753-62cf6aee3eaa)
 
 核心功能亮点：
 极简部署：只需一个 .html 文件，扔进 NAS 的 Web 文件夹即可。
