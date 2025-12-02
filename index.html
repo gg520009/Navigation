@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Dashboard</title>
+    <title>Infinity Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/lunar-javascript/lunar.js"></script>
@@ -14,6 +14,7 @@
         
         body {
             font-family: 'Noto Sans SC', sans-serif;
+            /* 保持原背景图片 */
             background: url('https://images.unsplash.com/photo-1477346611705-65d1883cee1e?q=80&w=2070&auto=format&fit=crop') no-repeat center center fixed;
             background-size: cover;
         }
@@ -35,9 +36,8 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
         
-        /* 选中状态样式 */
         .icon-option.active {
-            background: rgba(59, 130, 246, 0.5); /* blue-500 */
+            background: rgba(59, 130, 246, 0.5);
             border-color: rgba(96, 165, 250, 0.8);
         }
     </style>
@@ -88,8 +88,12 @@
                     <input type="text" v-model="searchText" placeholder="Google Search..." @keyup.enter="doSearch"
                            class="w-full bg-black/20 border border-white/10 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:bg-black/40 focus:border-white/30 transition-all placeholder-white/40">
                 </div>
+                
                 <div class="flex gap-3">
-                    <button @click="exportData" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/30 flex items-center justify-center transition" title="备份配置"><i class="fa-solid fa-download text-xs"></i></button>
+                    <button @click="exportData" class="bg-green-600 hover:bg-green-500 text-white px-4 py-1.5 rounded-full text-sm font-medium transition shadow-lg shadow-green-500/30 flex items-center gap-2">
+                        <i class="fa-solid fa-save"></i> <span class="hidden sm:inline">保存配置 (下载)</span>
+                    </button>
+                    
                     <button @click="openAddModal()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-full text-sm font-medium transition shadow-lg shadow-blue-500/30 flex items-center gap-2">
                         <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">添加</span>
                     </button>
@@ -222,6 +226,10 @@
 <script>
     const { createApp, ref, computed, onMounted, reactive } = Vue;
 
+    // --- 配置常量 ---
+    const CONFIG_FILE_NAME = 'config.json';
+    const LOCAL_STORAGE_KEY = 'infinityDashboardConfig';
+
     createApp({
         setup() {
             // 数据定义
@@ -243,11 +251,11 @@
             const isEditing = ref(false);
             const editIndexes = ref({ cat: -1, link: -1 });
             
-            // 表单数据，增加 iconType 和 iconValue
+            // 表单数据
             const form = reactive({ title: '', url: '', category: '', iconType: 'auto', iconValue: '' });
             const newCategoryName = ref('');
 
-            // 常用图标预设 (内网常用)
+            // 常用图标预设
             const commonIcons = [
                 'fa-solid fa-server', 'fa-solid fa-house', 'fa-solid fa-network-wired', 
                 'fa-solid fa-database', 'fa-brands fa-docker', 'fa-solid fa-film', 
@@ -256,30 +264,116 @@
                 'fa-brands fa-linux', 'fa-solid fa-wifi', 'fa-solid fa-folder'
             ];
 
-            const loadData = () => {
-                const savedData = localStorage.getItem('myNavData');
-                if (savedData) {
-                    categories.value = JSON.parse(savedData);
-                } else {
-                    categories.value = [
-                        { name: "我的服务", links: [
-                            { title: "NAS主页", url: "http://192.168.1.1", iconType: 'class', iconValue: 'fa-solid fa-server' },
-                            { title: "路由器", url: "http://192.168.1.254", iconType: 'class', iconValue: 'fa-solid fa-wifi' }
-                        ]}
-                    ];
-                }
-                const savedWeather = localStorage.getItem('myNavWeatherLoc');
-                if (savedWeather) {
-                    const loc = JSON.parse(savedWeather);
-                    Object.assign(weather, loc); // Load simple props
-                    weather.lat = loc.lat; weather.long = loc.long;
-                    fetchWeather();
-                }
+            // --------------------------------------------------------
+            // 新的配置加载/保存逻辑
+            // --------------------------------------------------------
+
+            const saveData = () => {
+                const config = {
+                    categories: categories.value,
+                    weatherLoc: {
+                        city: weather.city,
+                        lat: weather.lat,
+                        long: weather.long
+                    }
+                };
+                // 仅保存到 LocalStorage 作为备份和快速加载，不涉及文件写入
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(config));
             };
 
-            const saveData = () => localStorage.setItem('myNavData', JSON.stringify(categories.value));
+            const loadData = async () => {
+                let config = null;
 
-            // 时间更新
+                // 1. 尝试从 config.json 文件加载 (需要手动上传文件到服务器)
+                try {
+                    const response = await fetch(`./${CONFIG_FILE_NAME}`);
+                    if (response.ok) {
+                        config = await response.json();
+                        console.log(`成功从 ${CONFIG_FILE_NAME} 加载配置`);
+						console.log('配置内容检查：',config)
+                    } else if (response.status === 404) {
+                         console.warn(`未找到 ${CONFIG_FILE_NAME}，将尝试从本地存储加载。`);
+                    }
+                } catch (e) {
+                    console.error(`加载 ${CONFIG_FILE_NAME} 失败:`, e);
+                }
+
+                // 2. 如果文件加载失败，尝试从 LocalStorage 加载
+                if (!config) {
+                    const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+                    if (savedData) {
+                        try {
+                            config = JSON.parse(savedData);
+                            console.log("成功从 LocalStorage 加载配置。");
+                        } catch (e) {
+                            console.error("LocalStorage 数据解析失败:", e);
+                            config = null;
+                        }
+                    }
+                }
+
+                // 3. 如果都没有，加载默认配置
+                if (!config || !config.categories) {
+                    config = {
+                        categories: [
+                            { name: "我的服务", links: [
+                                { title: "NAS主页", url: "http://192.168.1.1", iconType: 'class', iconValue: 'fa-solid fa-server' },
+                                { title: "路由器", url: "http://192.168.1.254", iconType: 'class', iconValue: 'fa-solid fa-wifi' },
+                                { title: "Casaos", url: "http://192.168.6.192:2080", iconType: 'class', iconValue: 'fa-solid fa-wifi' }
+                            ]}
+                        ],
+                        weatherLoc: { temp: null, city: '', desc: '', icon: '', humidity: 0, wind: 0, lat: null, long: null }
+                    };
+                }
+
+                // 4. 应用配置
+                categories.value = config.categories;
+                if (config.weatherLoc) {
+                    // 只更新静态位置信息
+                    weather.city = config.weatherLoc.city || '';
+                    weather.lat = config.weatherLoc.lat || null;
+                    weather.long = config.weatherLoc.long || null;
+                    
+                    if (weather.lat && weather.long) {
+                        fetchWeather(); // 加载配置后，调用接口获取实时天气
+                    }
+                }
+                console.log("categoriesvalueis:");
+				console.log(categories.value);
+				console.log('加载的配置',config);
+                // 5. 同步到 LocalStorage
+                saveData();
+            };
+
+            // 导出配置（现为下载最新配置的config.json）
+            const exportData = () => {
+                const config = {
+                    categories: categories.value,
+                    weatherLoc: {
+                        city: weather.city,
+                        lat: weather.lat,
+                        long: weather.long
+                    }
+                };
+                
+                // 使用 JSON.stringify(config, null, 2) 格式化 JSON
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", CONFIG_FILE_NAME);
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+
+                alert(`配置已下载为 ${CONFIG_FILE_NAME} 文件。\n\n重要：请手动将此文件上传到服务器的 index.html 所在目录，以覆盖旧配置并实现下次自动加载！`);
+            };
+
+
+            // --------------------------------------------------------
+            // 现有功能函数（略作修改，确保调用 saveData）
+            // --------------------------------------------------------
+            
+            // 时间更新 (保持不变)
             const updateTime = () => {
                 const now = new Date();
                 timeDisplay.value = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
@@ -291,7 +385,7 @@
                 lunarDate.term = lunar.getJieQi() || '';
             };
 
-            // 天气逻辑
+            // 天气逻辑 (保持不变)
             const searchCity = async () => {
                 if(!cityQuery.value) return;
                 try {
@@ -301,7 +395,8 @@
             };
             const selectCity = (c) => {
                 weather.city = c.name; weather.lat = c.latitude; weather.long = c.longitude;
-                localStorage.setItem('myNavWeatherLoc', JSON.stringify({ name: c.name, lat: c.latitude, long: c.longitude }));
+                // 更新 LocalStorage 和文件配置 (通过 saveData)
+                saveData(); 
                 showCitySearch.value = false;
                 fetchWeather();
             };
@@ -338,7 +433,6 @@
                 form.title = item.title;
                 form.url = item.url;
                 form.category = categories.value[cIndex].name;
-                // 兼容旧数据
                 form.iconType = item.iconType || 'auto';
                 form.iconValue = item.iconValue || '';
                 showModal.value = true;
@@ -381,7 +475,7 @@
                         targetCat.links.push(newItem);
                     }
                 }
-                saveData();
+                saveData(); // 保存配置到 LocalStorage
                 closeModal();
             };
 
@@ -390,21 +484,13 @@
             const doSearch = () => { window.open(`https://www.google.com/search?q=${searchText.value}`, '_blank'); searchText.value=''; };
             
             const handleImgError = (e, link) => {
-                // 如果图片加载失败（比如内网没网），回退到首字母头像
                 e.target.src = 'https://ui-avatars.com/api/?name=' + link.title + '&background=random';
-            };
-
-            const exportData = () => {
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(categories.value));
-                const a = document.createElement('a');
-                a.href = dataStr; a.download = "mynav_backup.json";
-                document.body.appendChild(a); a.click(); a.remove();
             };
 
             const filteredCategories = computed(() => categories.value);
 
             onMounted(() => {
-                loadData();
+                loadData(); // 启动时自动加载配置
                 updateTime();
                 setInterval(updateTime, 1000);
                 setInterval(fetchWeather, 3600000);
